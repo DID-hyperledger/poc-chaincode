@@ -24,6 +24,8 @@ func (t *PerfTestChaincode) Invoke(stub shim.ChaincodeStubInterface) peer.Respon
 	function, args := stub.GetFunctionAndParameters()
     if function == "writeBlock"{
 		return t.writeBlock(stub, args)
+	} else if function == "query" {
+		return t.query(stub, args)
 	} else {
 		return shim.Error("Invalid invoke function name")
 	}
@@ -31,37 +33,56 @@ func (t *PerfTestChaincode) Invoke(stub shim.ChaincodeStubInterface) peer.Respon
 
 func (t *PerfTestChaincode) writeBlock(stub shim.ChaincodeStubInterface, args []string) peer.Response {
 
-	if len(args) < 3 {
+	if len(args) < 2 {
 		fmt.Printf("Invalid number of argument")
 		return shim.Error("Incorrect number of arguments")
 	}
 
 	var blockId = args[0]
 	var blockData = args[1]
-	var shaOperations = args[2]
+	inLen := len(blockData)
+	output := make([]byte, inLen+96)	// original input + 3x sha, 32 bytes each
+	copy(output, blockData)
 
-	// Run SHA loop as specify
-
-	operations, shaErr := strconv.Atoi(shaOperations)
-	if shaErr != nil {
-		fmt.Printf("Expect integer for number of SHA operations")
-		return shim.Error("Argument Invalid")
-	}
-
-	for i:=0; i < operations; i++ {
+	for i:=1; i < 4; i++ {
 		dummy := sha256.New()
-		dummy.Write([]byte(blockData))
+		input := string(blockData)+strconv.Itoa(i)
+		dummy.Write([]byte(input))
+		copy(output[inLen+(32*(i-1)):], dummy.Sum(nil)[:])
 	}
 
 	// Write transaction
-	err := stub.PutState(blockId, []byte(blockData))
+	err := stub.PutState(blockId, []byte(output))
 	if err != nil {
-		fmt.Printf("Could not write block")
+		fmt.Printf("\nCould not write block")
 		return shim.Error("Cannot write block")
 	}
-
-	fmt.Printf("Successfully saved new block")
+	
+	fmt.Printf("\n")
 	return shim.Success(nil)
+}
+
+func (t *PerfTestChaincode) query(stub shim.ChaincodeStubInterface, args []string) peer.Response {
+
+	var id, jsonResp string
+	var err error
+
+	if len(args) != 1 {
+		fmt.Printf("Invalid number of parameters")
+		return shim.Error("Invalid number of parameters")
+	}
+	id = args[0]
+
+	valAsbytes, err := stub.GetState(id)
+	if err != nil {
+		jsonResp = "{\"Error\":\"Failed to get state for " + id + "\"}"
+		return shim.Error(jsonResp)
+	} else if valAsbytes == nil {
+		jsonResp = "{\"Error\":\"Data does not exist: " + id + "\"}"
+		return shim.Error(jsonResp)
+	}
+
+	return shim.Success(valAsbytes)
 }
  
 func main() {
@@ -70,6 +91,6 @@ func main() {
         fmt.Println("Could not start PerfTestChaincode")
     } else {
         fmt.Println("SampleChaincode successfully started")
-    }
+    } 
  
 }
