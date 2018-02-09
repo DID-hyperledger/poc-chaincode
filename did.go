@@ -40,9 +40,10 @@ func (t *PerfTestChaincode) writeBlock(stub shim.ChaincodeStubInterface, args []
 
 	var blockId = args[0]
 	var blockData = args[1]
-	inLen := len(blockData)
-	output := make([]byte, inLen+96)	// original input + 3x sha, 32 bytes each
-	copy(output, blockData)
+	data := blockId+blockData
+	inLen := len(data)
+	output := make([]byte, inLen+96)	// sequence + original input + 3x sha, 32 bytes each
+	copy(output, data)
 
 	for i:=1; i < 4; i++ {
 		dummy := sha256.New()
